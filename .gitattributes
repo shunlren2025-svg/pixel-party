@@ -1,2 +1,1 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+vendor/tuff-client/Tuff_Client_Offline_WASM.html -diff

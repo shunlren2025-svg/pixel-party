@@ -1679,5 +1679,469 @@
     });
   };
 
+  function chanceGame(root, game, config) {
+    var ui = layout(root, game);
+    var scoreStat = ui.stat("Score", "0");
+    var livesStat = ui.stat("Lives", "3");
+    var roundStat = ui.stat("Round", "1");
+    var wrap = el("div", "micro-wrap");
+    var display = el("div", "micro-display");
+    var shells = el("div", "micro-shells");
+    wrap.append(display, shells);
+    ui.stage.appendChild(wrap);
+    var score = 0;
+    var lives = 3;
+    var round = 1;
+    var deck = [];
+    var peeked = false;
+
+    function newDeck() {
+      var danger = Math.min(4, 1 + Math.floor(round / 2));
+      deck = [];
+      for (var i = 0; i < 6; i++) deck.push(i < danger ? "hot" : "safe");
+      deck = shuffle(deck);
+      peeked = false;
+    }
+
+    function render(message) {
+      scoreStat.set(score);
+      livesStat.set(lives);
+      roundStat.set(round);
+      display.textContent = message || config.prompt;
+      shells.replaceChildren();
+      deck.forEach(function (_, index) {
+        var slot = el("div", "micro-shell", index === 0 && peeked ? deck[0].toUpperCase() : "?");
+        slot.style.background = index === 0 && peeked ? deck[0] === "hot" ? "#ff715b" : "#48d6a3" : "";
+        shells.appendChild(slot);
+      });
+    }
+
+    function reset() {
+      score = 0;
+      lives = 3;
+      round = 1;
+      newDeck();
+      render();
+    }
+
+    function drawShell() {
+      if (lives <= 0) return;
+      if (!deck.length) {
+        round++;
+        newDeck();
+      }
+      var next = deck.shift();
+      if (next === "hot") {
+        lives--;
+        render(lives ? "Hot shell. You lost a life." : "Table wins. Press New.");
+      } else {
+        score++;
+        render("Safe shell. Banked a point.");
+      }
+      if (!deck.length && lives > 0) {
+        round++;
+        newDeck();
+      }
+    }
+
+    function peek() {
+      if (peeked || !deck.length) return;
+      peeked = true;
+      render(deck[0] === "hot" ? "Scanner sees danger first." : "Scanner sees safe first.");
+    }
+
+    ui.controls.append(
+      button("Draw", "Draw the next shell", drawShell),
+      button("Scan", "Reveal the next shell once", peek),
+      button("New", "Restart", reset)
+    );
+    reset();
+  }
+
+  function timingGame(root, game, config) {
+    var ui = layout(root, game);
+    var scoreStat = ui.stat("Score", "0");
+    var streakStat = ui.stat("Streak", "0");
+    var wrap = el("div", "micro-wrap");
+    var meter = el("div", "timing-meter");
+    var zone = el("div", "timing-zone");
+    var pin = el("div", "timing-pin");
+    meter.append(zone, pin);
+    var display = el("div", "micro-display", config.prompt);
+    wrap.append(display, meter);
+    ui.stage.appendChild(wrap);
+    var value = 0;
+    var dir = 1;
+    var score = 0;
+    var streak = 0;
+
+    function hit() {
+      if (value > 42 && value < 58) {
+        score += 1 + streak;
+        streak++;
+        display.textContent = config.hit;
+      } else {
+        streak = 0;
+        display.textContent = config.miss;
+      }
+      scoreStat.set(score);
+      streakStat.set(streak);
+    }
+
+    ui.controls.append(button("Hit", "Try the timing window", hit), button("New", "Reset", function () {
+      score = 0;
+      streak = 0;
+      display.textContent = config.prompt;
+      scoreStat.set(score);
+      streakStat.set(streak);
+    }));
+    loop(function (dt) {
+      value += dir * dt * (55 + streak * 4);
+      if (value >= 100 || value <= 0) dir *= -1;
+      value = clamp(value, 0, 100);
+      pin.style.left = value + "%";
+    });
+  }
+
+  function gridGame(root, game, config) {
+    var ui = layout(root, game);
+    var scoreStat = ui.stat("Score", "0");
+    var livesStat = ui.stat("Lives", "3");
+    var board = el("div", "micro-grid");
+    ui.stage.appendChild(board);
+    var player;
+    var goal;
+    var hazards;
+    var score;
+    var lives;
+
+    function reset() {
+      player = { x: 0, y: 0 };
+      goal = { x: 4, y: 4 };
+      hazards = [{ x: 2, y: 1 }, { x: 3, y: 3 }, { x: 1, y: 4 }];
+      score = 0;
+      lives = 3;
+      render();
+    }
+
+    function same(a, b) {
+      return a.x === b.x && a.y === b.y;
+    }
+
+    function move(dx, dy) {
+      player.x = clamp(player.x + dx, 0, 4);
+      player.y = clamp(player.y + dy, 0, 4);
+      if (hazards.some(function (hazard) { return same(hazard, player); })) {
+        lives--;
+        player = { x: 0, y: 0 };
+      }
+      if (same(player, goal)) {
+        score++;
+        goal = { x: rand(5), y: rand(5) };
+        hazards = hazards.map(function () { return { x: rand(5), y: rand(5) }; });
+      }
+      if (lives <= 0) reset();
+      render();
+    }
+
+    function render() {
+      board.replaceChildren();
+      for (var y = 0; y < 5; y++) {
+        for (var x = 0; x < 5; x++) {
+          var cell = el("div", "micro-cell");
+          var point = { x: x, y: y };
+          if (same(point, player)) {
+            cell.textContent = "P";
+            cell.style.background = "#75e0ff";
+          } else if (same(point, goal)) {
+            cell.textContent = "G";
+            cell.style.background = "#48d6a3";
+          } else if (hazards.some(function (hazard) { return same(hazard, point); })) {
+            cell.textContent = "X";
+            cell.style.background = "#ff715b";
+          }
+          board.appendChild(cell);
+        }
+      }
+      scoreStat.set(score);
+      livesStat.set(lives);
+    }
+
+    ui.controls.append(
+      button("New", "Reset", reset),
+      button("Up", "Move up", function () { move(0, -1); }),
+      button("Left", "Move left", function () { move(-1, 0); }),
+      button("Down", "Move down", function () { move(0, 1); }),
+      button("Right", "Move right", function () { move(1, 0); })
+    );
+    keyControls(function (event) {
+      if (event.key === "ArrowUp") { event.preventDefault(); move(0, -1); }
+      if (event.key === "ArrowDown") { event.preventDefault(); move(0, 1); }
+      if (event.key === "ArrowLeft") { event.preventDefault(); move(-1, 0); }
+      if (event.key === "ArrowRight") { event.preventDefault(); move(1, 0); }
+    });
+    reset();
+  }
+
+  function targetGame(root, game, config) {
+    var ui = layout(root, game);
+    var scoreStat = ui.stat("Score", "0");
+    var livesStat = ui.stat("Lives", "5");
+    var kit = makeCanvas(ui.stage, 640, 420, false);
+    var canvas = kit.canvas;
+    var ctx = kit.ctx;
+    var score = 0;
+    var lives = 5;
+    var target = {};
+
+    function place() {
+      target = { x: 50 + rand(540), y: 50 + rand(320), r: 18 + rand(18) };
+    }
+
+    function reset() {
+      score = 0;
+      lives = 5;
+      place();
+      renderStats();
+    }
+
+    function renderStats() {
+      scoreStat.set(score);
+      livesStat.set(lives);
+    }
+
+    function draw() {
+      drawBackdrop(ctx, 640, 420);
+      ctx.fillStyle = config.color || "#75e0ff";
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, target.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#f7f9ff";
+      ctx.font = "900 18px system-ui";
+      ctx.textAlign = "center";
+      ctx.fillText(config.prompt, 320, 36);
+    }
+
+    canvas.addEventListener("pointerdown", function (event) {
+      var rect = canvas.getBoundingClientRect();
+      var x = (event.clientX - rect.left) / rect.width * 640;
+      var y = (event.clientY - rect.top) / rect.height * 420;
+      var hit = Math.hypot(x - target.x, y - target.y) <= target.r;
+      if (hit) {
+        score++;
+      } else {
+        lives--;
+      }
+      if (lives <= 0) reset();
+      place();
+      renderStats();
+    });
+    ui.controls.append(button("New", "Reset", reset));
+    reset();
+    loop(draw);
+  }
+
+  function laneGame(root, game, config) {
+    var ui = layout(root, game);
+    var scoreStat = ui.stat("Score", "0");
+    var bestStat = ui.stat("Best", storageGet(game.id + "-best", 0));
+    var kit = makeCanvas(ui.stage, 540, 640, true);
+    var ctx = kit.ctx;
+    var lane = 1;
+    var obstacles = [];
+    var timer = 0;
+    var score = 0;
+    var best = storageGet(game.id + "-best", 0);
+    var dead = false;
+
+    function reset() {
+      lane = 1;
+      obstacles = [];
+      timer = 0;
+      score = 0;
+      dead = false;
+    }
+
+    function shift(delta) {
+      if (dead) return;
+      lane = clamp(lane + delta, 0, 2);
+    }
+
+    function update(dt) {
+      if (dead) return;
+      score += dt * 10;
+      timer -= dt;
+      if (timer <= 0) {
+        timer = Math.max(.34, .82 - score * .003);
+        obstacles.push({ lane: rand(3), y: -60, h: 54, speed: 210 + score * 2 });
+      }
+      obstacles.forEach(function (item) { item.y += item.speed * dt; });
+      obstacles.forEach(function (item) {
+        if (item.lane === lane && item.y + item.h > 520 && item.y < 584) {
+          dead = true;
+          best = Math.max(best, Math.floor(score));
+          storageSet(game.id + "-best", best);
+        }
+      });
+      obstacles = obstacles.filter(function (item) { return item.y < 700; });
+      scoreStat.set(Math.floor(score));
+      bestStat.set(best);
+    }
+
+    function draw() {
+      drawBackdrop(ctx, 540, 640);
+      for (var i = 0; i < 3; i++) {
+        ctx.fillStyle = i === lane ? "rgba(117,224,255,.22)" : "rgba(255,255,255,.05)";
+        ctx.fillRect(35 + i * 155, 0, 120, 640);
+      }
+      ctx.fillStyle = "#ff715b";
+      obstacles.forEach(function (item) { ctx.fillRect(52 + item.lane * 155, item.y, 86, item.h); });
+      ctx.fillStyle = config.color || "#f7c75b";
+      ctx.fillRect(68 + lane * 155, 520, 56, 60);
+      if (dead) overlay(ctx, 540, 640, "Crashed", "Press New");
+    }
+
+    ui.controls.append(button("New", "Reset", reset), button("Left", "Left", function () { shift(-1); }), button("Right", "Right", function () { shift(1); }));
+    keyControls(function (event) {
+      if (event.key === "ArrowLeft" || event.key.toLowerCase() === "a") { event.preventDefault(); shift(-1); }
+      if (event.key === "ArrowRight" || event.key.toLowerCase() === "d") { event.preventDefault(); shift(1); }
+    });
+    reset();
+    loop(function (dt) {
+      update(dt);
+      draw();
+    });
+  }
+
+  function embeddedWebGame(root, game) {
+    var ui = layout(root, game);
+    var playerStat = ui.stat("Player", "Embedded");
+    var buildStat = ui.stat("Build", game.buildLabel || game.releaseAssetName || "Web");
+    var frameUrl = game.embedUrl || game.playUrl || game.externalUrl;
+    ui.stage.classList.add("embed-stage");
+
+    var shell = el("div", "embed-shell");
+    var frame = el("iframe", "game-embed");
+    frame.title = game.title + " player";
+    frame.src = frameUrl;
+    frame.allow = "fullscreen; pointer-lock; clipboard-read; clipboard-write; autoplay; gamepad";
+    frame.referrerPolicy = "no-referrer";
+    frame.setAttribute("allowfullscreen", "true");
+    shell.appendChild(frame);
+    ui.stage.appendChild(shell);
+
+    ui.controls.append(
+      button(game.launchLabel || "Open Full Player", "Open the player in a new tab", function () {
+        window.open(frameUrl, "_blank", "noopener");
+      }),
+      button("Reload Player", "Reload the embedded player", function () {
+        frame.src = frameUrl;
+      })
+    );
+    ui.help.textContent = game.releaseAssetName || "";
+    playerStat.set("On screen");
+    buildStat.set(game.buildLabel || game.releaseAssetName || "Web");
+  }
+
+  function websiteLauncher(root, game) {
+    var ui = layout(root, game);
+    var visits = ui.stat("Launcher", "Ready");
+    var panel = el("div", "site-launcher");
+    var title = el("strong", "", game.title);
+    var url = el("input", "access-url");
+    url.readOnly = true;
+    url.value = game.externalUrl || "";
+    var open = button(game.launchLabel || "Open Site", "Open website", function () {
+      if (game.externalUrl) {
+        visits.set("Opened");
+        window.open(game.externalUrl, "_blank", "noopener");
+      }
+    });
+    panel.append(title, url, open);
+    ui.stage.appendChild(panel);
+  }
+
+  Games.soundboard = function (root, game) {
+    var ui = layout(root, game);
+    var played = ui.stat("Sounds", "0");
+    var panel = el("div", "sound-grid");
+    ui.stage.appendChild(panel);
+    var count = 0;
+    var sounds = [
+      ["Laser", 660, .08],
+      ["Coin", 880, .07],
+      ["Bass", 120, .12],
+      ["Pop", 440, .05],
+      ["Alert", 520, .16],
+      ["Blip", 760, .06],
+      ["Power", 220, .18],
+      ["Win", 990, .14]
+    ];
+
+    function play(freq, length) {
+      var AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      var context = new AudioContext();
+      var osc = context.createOscillator();
+      var gain = context.createGain();
+      osc.frequency.value = freq;
+      osc.type = "square";
+      gain.gain.value = .08;
+      osc.connect(gain);
+      gain.connect(context.destination);
+      osc.start();
+      osc.stop(context.currentTime + length);
+      count++;
+      played.set(count);
+    }
+
+    sounds.forEach(function (sound) {
+      panel.appendChild(button(sound[0], "Play " + sound[0], function () {
+        play(sound[1], sound[2]);
+      }));
+    });
+  };
+
+  var quickConfigs = {
+    "buckshot-table": { mode: "chance", prompt: "Count the blanks, scan once, then survive the roulette table." },
+    "shell-shuffle": { mode: "chance", prompt: "Track the shell and press your luck." },
+    "vault-roulette": { mode: "chance", prompt: "Open vault slots before the alarm bites." },
+    "neon-duel": { mode: "chance", prompt: "Choose the next charge and outlast the duel." },
+    "dice-duel": { mode: "chance", prompt: "Roll risk, bank points, avoid the hot draw." },
+    "card-shark": { mode: "chance", prompt: "Call the odds and build the streak." },
+    "laser-maze": { mode: "grid" },
+    "ghost-escape": { mode: "grid" },
+    "dungeon-doors": { mode: "grid" },
+    "drift-racer": { mode: "lane", color: "#ff715b" },
+    "orbit-jumper": { mode: "lane", color: "#75e0ff" },
+    "bubble-pop": { mode: "target", prompt: "Pop the bubble", color: "#75e0ff" },
+    "rhythm-tap": { mode: "timing", prompt: "Tap inside the center beat.", hit: "Clean beat.", miss: "Missed beat." },
+    "tower-stack": { mode: "timing", prompt: "Drop on the center line.", hit: "Stacked clean.", miss: "Tower wobbled." },
+    "pixel-fishing": { mode: "timing", prompt: "Reel when the marker centers.", hit: "Fish caught.", miss: "It slipped away." },
+    "asteroid-miner": { mode: "target", prompt: "Crack the asteroid", color: "#8b96a8" },
+    "sky-tiles": { mode: "target", prompt: "Hit the lit tile", color: "#ff6b9a" },
+    "mini-golf": { mode: "timing", prompt: "Putt at center power.", hit: "Sunk it.", miss: "Rimmed out." },
+    "bottle-flip": { mode: "timing", prompt: "Flip at the sweet spot.", hit: "Landed.", miss: "Tipped over." }
+  };
+
+  Object.keys(quickConfigs).forEach(function (id) {
+    Games[id] = function (root, game) {
+      var config = quickConfigs[id];
+      if (config.mode === "chance") chanceGame(root, game, config);
+      if (config.mode === "timing") timingGame(root, game, config);
+      if (config.mode === "grid") gridGame(root, game, config);
+      if (config.mode === "target") targetGame(root, game, config);
+      if (config.mode === "lane") laneGame(root, game, config);
+    };
+  });
+
+  ["tuff-client", "cloverpit"].forEach(function (id) {
+    Games[id] = embeddedWebGame;
+  });
+
+  ["youtube", "spotify", "twitch", "discord", "wikipedia"].forEach(function (id) {
+    Games[id] = websiteLauncher;
+  });
+
   window.PixelPartyGames = Games;
 }());
