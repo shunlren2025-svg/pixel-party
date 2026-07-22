@@ -12,6 +12,8 @@
 
   document.title = game.title + " - Pixel Party";
   var plays = window.PixelPartyPopularity ? window.PixelPartyPopularity.record(game.id) : 0;
+  var settings = window.PixelPartySettings ? window.PixelPartySettings.read() : {};
+  if (window.PixelPartySettings) window.PixelPartySettings.apply(settings);
 
   function loadingImageUrl() {
     var script = document.querySelector('script[src$="game-page.js"]');
@@ -20,6 +22,11 @@
   }
 
   function showLoading(next) {
+    if (settings.skipLoader) {
+      next();
+      return;
+    }
+
     var loader = document.createElement("section");
     loader.className = "loading-screen";
 

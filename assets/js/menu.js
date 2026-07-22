@@ -7,6 +7,8 @@
   var libraryCount = document.getElementById("library-count");
   var activeCategory = "All";
   var popularity = window.PixelPartyPopularity;
+  var settingsApi = window.PixelPartySettings;
+  var activeSettings = settingsApi ? settingsApi.read() : {};
 
   if (libraryCount) {
     libraryCount.textContent = games.length + " games/sites";
@@ -36,6 +38,69 @@
     categories.forEach(function (category) {
       buttons.appendChild(makeButton(category));
     });
+  }
+
+  function buildSettingsPanel() {
+    if (!settingsApi || !buttons || !buttons.parentNode) return;
+
+    var wrap = document.createElement("section");
+    wrap.className = "settings-dock";
+    var toggle = document.createElement("button");
+    toggle.className = "chip settings-toggle";
+    toggle.type = "button";
+    toggle.textContent = "Settings";
+    var panel = document.createElement("div");
+    panel.className = "settings-panel";
+    panel.hidden = true;
+
+    function setSetting(name, value) {
+      var update = {};
+      update[name] = value;
+      activeSettings = settingsApi.write(Object.assign({}, activeSettings, update));
+      renderGames();
+    }
+
+    function row(name, labelText) {
+      var label = document.createElement("label");
+      label.className = "setting-row";
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = Boolean(activeSettings[name]);
+      var text = document.createElement("span");
+      text.textContent = labelText;
+      input.addEventListener("change", function () {
+        setSetting(name, input.checked);
+      });
+      label.append(input, text);
+      return label;
+    }
+
+    var reset = document.createElement("button");
+    reset.className = "small-btn";
+    reset.type = "button";
+    reset.textContent = "Reset Plays";
+    reset.addEventListener("click", function () {
+      if (popularity && popularity.reset) popularity.reset();
+      reset.textContent = "Reset";
+      setTimeout(function () { reset.textContent = "Reset Plays"; }, 1200);
+      renderGames();
+    });
+
+    panel.append(
+      row("compactCards", "Compact cards"),
+      row("hideRemoteImages", "Hide remote images"),
+      row("reduceMotion", "Reduce motion"),
+      row("skipLoader", "Skip loading screen"),
+      reset
+    );
+
+    toggle.addEventListener("click", function () {
+      panel.hidden = !panel.hidden;
+      toggle.classList.toggle("active", !panel.hidden);
+    });
+
+    wrap.append(toggle, panel);
+    buttons.parentNode.appendChild(wrap);
   }
 
   function matchesSearch(game, query) {
@@ -104,6 +169,11 @@
       golf: "<rect x='0' y='80' width='180' height='40' fill='#48d6a3'/><circle cx='132' cy='92' r='10' fill='#111'/><circle cx='56' cy='78' r='7' fill='#f7f9ff'/><path d='M58 76 L104 42' stroke='#f7c75b' stroke-width='5'/>",
       bottle: "<rect x='76' y='30' width='26' height='66' rx='10' fill='#75e0ff'/><rect x='82' y='18' width='14' height='18' rx='4' fill='#f7f9ff'/><path d='M40 98 H140' stroke='#f7c75b' stroke-width='8' stroke-linecap='round'/>",
       doors: "<rect x='38' y='28' width='36' height='70' fill='#7b4725'/><rect x='86' y='28' width='36' height='70' fill='#9b6544'/><rect x='134' y='28' width='20' height='70' fill='#3a2a22'/><circle cx='66' cy='64' r='4' fill='#f7c75b'/>",
+      code: "<rect x='28' y='28' width='124' height='72' rx='10' fill='#111'/><path d='M70 48 L50 64 L70 80 M110 48 L130 64 L110 80' fill='none' stroke='#f7f9ff' stroke-width='8' stroke-linecap='round' stroke-linejoin='round'/><path d='M96 42 L82 86' stroke='#8b96a8' stroke-width='6' stroke-linecap='round'/>",
+      blocks: "<rect x='30' y='30' width='40' height='40' rx='8' fill='#ff9f1c'/><rect x='70' y='30' width='40' height='40' rx='8' fill='#75e0ff'/><rect x='50' y='70' width='40' height='40' rx='8' fill='#48d6a3'/><rect x='90' y='70' width='40' height='40' rx='8' fill='#ff6b9a'/>",
+      archive: "<rect x='30' y='42' width='120' height='58' rx='8' fill='#f7f9ff'/><rect x='42' y='28' width='96' height='18' fill='#f7c75b'/><path d='M56 58 H124 M56 74 H124 M56 90 H96' stroke='#111' stroke-width='6'/>",
+      learn: "<rect x='34' y='34' width='112' height='68' rx='10' fill='#48d6a3'/><path d='M54 54 H126 M54 72 H112 M54 90 H98' stroke='#071018' stroke-width='7' stroke-linecap='round'/><circle cx='134' cy='34' r='14' fill='#75e0ff'/>",
+      gamesite: "<rect x='36' y='44' width='108' height='48' rx='20' fill='#55a7ff'/><circle cx='68' cy='68' r='12' fill='#f7f9ff'/><path d='M104 60 V76 M96 68 H112' stroke='#f7c75b' stroke-width='7' stroke-linecap='round'/>",
       soundboard: "<rect x='28' y='26' width='124' height='78' rx='14' fill='#22221e'/><circle cx='60' cy='64' r='18' fill='#ff6b9a'/><circle cx='102' cy='50' r='12' fill='#75e0ff'/><path d='M120 76 C138 64 138 50 120 38' fill='none' stroke='#f7c75b' stroke-width='6'/>",
       video: "<rect x='30' y='30' width='120' height='68' rx='14' fill='#ff715b'/><path d='M80 50 L112 64 L80 80 Z' fill='#f7f9ff'/>",
       music: "<circle cx='66' cy='78' r='16' fill='#48d6a3'/><path d='M78 76 V30 H124 V62' stroke='#48d6a3' stroke-width='10' fill='none'/><circle cx='124' cy='78' r='16' fill='#48d6a3'/>",
@@ -128,7 +198,8 @@
   function card(game) {
     var link = document.createElement("a");
     var rankClass = game.popularityRank === 1 ? " popular-rank-1" : game.popularityRank <= 5 ? " popular-top-five" : "";
-    link.className = "game-card" + rankClass + (game.imageUrl ? " photo-card" : "");
+    var useRemoteImage = game.imageUrl && !activeSettings.hideRemoteImages;
+    link.className = "game-card" + rankClass + (useRemoteImage ? " photo-card" : "");
     link.href = game.file;
     link.style.setProperty("--accent-a", game.colors[0]);
     link.style.setProperty("--accent-b", game.colors[1]);
@@ -141,8 +212,8 @@
     picture.className = "game-picture";
     picture.alt = game.title + " preview";
     picture.loading = "lazy";
-    picture.src = game.imageUrl || thumbnail(game);
-    if (game.imageUrl) {
+    picture.src = useRemoteImage ? game.imageUrl : thumbnail(game);
+    if (useRemoteImage) {
       picture.addEventListener("error", function () {
         picture.src = thumbnail(game);
       }, { once: true });
@@ -188,6 +259,7 @@
   }
 
   function renderGames() {
+    activeSettings = settingsApi ? settingsApi.read() : activeSettings;
     var query = search.value.trim().toLowerCase();
     var rankedGames = popularity ? popularity.decorate(games) : games.map(function (game, index) {
       return Object.assign({}, game, { plays: 0, popularityRank: index + 1 });
@@ -213,5 +285,6 @@
 
   search.addEventListener("input", renderGames);
   renderButtons();
+  buildSettingsPanel();
   renderGames();
 }());

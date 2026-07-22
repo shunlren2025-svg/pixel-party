@@ -622,107 +622,6 @@
     render();
   };
 
-  Games["tuff-client"] = function (root, game) {
-    var ui = layout(root, game);
-    var blocksStat = ui.stat("Blocks", "0");
-    var toolStat = ui.stat("Tool", "Grass");
-    ui.help.textContent = "";
-    var wrap = el("div", "launcher-wrap");
-    var launcher = el("div", "launcher-panel");
-    var urlInput = el("input", "launcher-input");
-    urlInput.type = "url";
-    urlInput.placeholder = "Paste Tuff Client / Eaglercraft URL";
-    urlInput.value = storageGet("tuff-url", "");
-    var version = el("select", "launcher-select");
-    ["Latest", "1.8.8", "1.5.2", "Beta", "Custom"].forEach(function (name) {
-      var option = el("option", "", name);
-      version.appendChild(option);
-    });
-    var launcherButtons = el("div", "launcher-controls");
-    launcherButtons.append(
-      button("Save URL", "Save launcher URL", function () {
-        storageSet("tuff-url", urlInput.value.trim());
-      }),
-      button("Open Launcher", "Open saved launcher in a new tab", function () {
-        var url = urlInput.value.trim();
-        if (!/^https?:\/\//i.test(url)) {
-          alert("Paste a full https:// launcher URL first.");
-          return;
-        }
-        storageSet("tuff-url", url);
-        window.open(url, "_blank", "noopener");
-      })
-    );
-    launcher.append(
-      el("strong", "", "Tuff Client MC Launcher"),
-      urlInput,
-      version,
-      launcherButtons
-    );
-
-    var builder = el("div", "block-builder");
-    var grid = el("div", "block-grid");
-    var palette = el("div", "launcher-controls");
-    var colors = [
-      ["Grass", "#48d65f"],
-      ["Dirt", "#9b6544"],
-      ["Stone", "#8b96a8"],
-      ["Water", "#55a7ff"],
-      ["Lava", "#ff715b"],
-      ["Air", "#151512"]
-    ];
-    var selected = colors[0];
-    var world = storageGet("block-world", null) || Array.from({ length: 140 }, function (_, index) {
-      var row = Math.floor(index / 14);
-      return row > 7 ? "#9b6544" : row === 7 ? "#48d65f" : "#151512";
-    });
-
-    function countBlocks() {
-      return world.filter(function (color) {
-        return color !== "#151512" && color !== "#111722";
-      }).length;
-    }
-
-    function renderBuilder() {
-      toolStat.set(selected[0]);
-      blocksStat.set(countBlocks());
-      grid.replaceChildren();
-      world.forEach(function (color, index) {
-        var cell = el("button", "block-cell");
-        cell.type = "button";
-        cell.style.background = color;
-        cell.setAttribute("aria-label", "Block " + index);
-        cell.addEventListener("click", function () {
-          world[index] = selected[1];
-          storageSet("block-world", world);
-          renderBuilder();
-        });
-        grid.appendChild(cell);
-      });
-    }
-
-    colors.forEach(function (item) {
-      var pick = button(item[0], "Select " + item[0], function () {
-        selected = item;
-        renderBuilder();
-      });
-      pick.style.borderColor = item[1];
-      palette.appendChild(pick);
-    });
-    ui.controls.append(button("Reset Builder", "Reset mini world", function () {
-      storageSet("block-world", null);
-      world = Array.from({ length: 140 }, function (_, index) {
-        var row = Math.floor(index / 14);
-        return row > 7 ? "#9b6544" : row === 7 ? "#48d65f" : "#151512";
-      });
-      renderBuilder();
-    }));
-    builder.append(palette, grid);
-    wrap.append(launcher, builder);
-    ui.stage.appendChild(wrap);
-    renderBuilder();
-  };
-
   Games["brick-breaker"] = function (root, game) {
     var ui = layout(root, game);
     var scoreStat = ui.stat("Score", "0");
@@ -2015,7 +1914,7 @@
 
   function embeddedWebGame(root, game) {
     var ui = layout(root, game);
-    var playerStat = ui.stat("Player", "Embedded");
+    var playerStat = ui.stat("Page", "Loading");
     var buildStat = ui.stat("Build", game.buildLabel || game.releaseAssetName || "Web");
     var frameUrl = game.embedUrl || game.playUrl || game.externalUrl;
     ui.stage.classList.add("embed-stage");
@@ -2027,6 +1926,12 @@
     frame.allow = "fullscreen; pointer-lock; clipboard-read; clipboard-write; autoplay; gamepad";
     frame.referrerPolicy = "no-referrer";
     frame.setAttribute("allowfullscreen", "true");
+    if (game.frameSandbox) {
+      frame.setAttribute("sandbox", game.frameSandbox);
+    }
+    frame.addEventListener("load", function () {
+      playerStat.set("On screen");
+    });
     shell.appendChild(frame);
     ui.stage.appendChild(shell);
 
@@ -2038,69 +1943,61 @@
         frame.src = frameUrl;
       })
     );
-    ui.help.textContent = game.releaseAssetName || "";
-    playerStat.set("On screen");
+    ui.help.textContent = game.playerNote || "";
     buildStat.set(game.buildLabel || game.releaseAssetName || "Web");
   }
 
   function websiteLauncher(root, game) {
     var ui = layout(root, game);
-    var visits = ui.stat("Launcher", "Ready");
-    var panel = el("div", "site-launcher");
-    var title = el("strong", "", game.title);
-    var url = el("input", "access-url");
-    url.readOnly = true;
-    url.value = game.externalUrl || "";
-    var open = button(game.launchLabel || "Open Site", "Open website", function () {
-      if (game.externalUrl) {
-        visits.set("Opened");
-        window.open(game.externalUrl, "_blank", "noopener");
-      }
-    });
-    panel.append(title, url, open);
-    ui.stage.appendChild(panel);
-  }
+    var frameUrl = game.embedUrl || game.externalUrl || game.playUrl;
+    var pageStat = ui.stat(game.openMode === "download" ? "Download" : "Page", "Ready");
 
-  Games.soundboard = function (root, game) {
-    var ui = layout(root, game);
-    var played = ui.stat("Sounds", "0");
-    var panel = el("div", "sound-grid");
-    ui.stage.appendChild(panel);
-    var count = 0;
-    var sounds = [
-      ["Laser", 660, .08],
-      ["Coin", 880, .07],
-      ["Bass", 120, .12],
-      ["Pop", 440, .05],
-      ["Alert", 520, .16],
-      ["Blip", 760, .06],
-      ["Power", 220, .18],
-      ["Win", 990, .14]
-    ];
-
-    function play(freq, length) {
-      var AudioContext = window.AudioContext || window.webkitAudioContext;
-      if (!AudioContext) return;
-      var context = new AudioContext();
-      var osc = context.createOscillator();
-      var gain = context.createGain();
-      osc.frequency.value = freq;
-      osc.type = "square";
-      gain.gain.value = .08;
-      osc.connect(gain);
-      gain.connect(context.destination);
-      osc.start();
-      osc.stop(context.currentTime + length);
-      count++;
-      played.set(count);
+    if (game.openMode === "download") {
+      var panel = el("div", "site-launcher");
+      var title = el("strong", "", game.title);
+      var url = el("input", "access-url");
+      url.readOnly = true;
+      url.value = game.downloadUrl || game.externalUrl || "";
+      var open = button(game.downloadLabel || game.launchLabel || "Open", "Open download page", function () {
+        if (game.downloadUrl || game.externalUrl) {
+          pageStat.set("Opened");
+          window.open(game.downloadUrl || game.externalUrl, "_blank", "noopener");
+        }
+      });
+      panel.append(title, url, open);
+      ui.stage.appendChild(panel);
+      return;
     }
 
-    sounds.forEach(function (sound) {
-      panel.appendChild(button(sound[0], "Play " + sound[0], function () {
-        play(sound[1], sound[2]);
-      }));
+    ui.stage.classList.add("embed-stage");
+    var shell = el("div", "embed-shell website-shell");
+    var frame = el("iframe", "game-embed");
+    var fallback = el("div", "embed-fallback");
+    fallback.append(
+      el("strong", "", game.title),
+      el("span", "", "If the page stays blank, use the open button in the side panel.")
+    );
+    frame.title = game.title + " page";
+    frame.src = frameUrl;
+    frame.allow = "fullscreen; autoplay; clipboard-read; clipboard-write; encrypted-media; picture-in-picture";
+    frame.referrerPolicy = "no-referrer";
+    frame.setAttribute("allowfullscreen", "true");
+    frame.addEventListener("load", function () {
+      shell.classList.add("embed-loaded");
+      pageStat.set("On screen");
     });
-  };
+    shell.append(frame, fallback);
+    ui.stage.appendChild(shell);
+    ui.controls.append(
+      button(game.launchLabel || "Open Full Site", "Open in a new tab", function () {
+        if (frameUrl) window.open(frameUrl, "_blank", "noopener");
+      }),
+      button("Reload Page", "Reload the embedded page", function () {
+        frame.src = frameUrl;
+        pageStat.set("Reloaded");
+      })
+    );
+  }
 
   var quickConfigs = {
     "buckshot-table": { mode: "chance", prompt: "Count the blanks, scan once, then survive the roulette table." },
@@ -2112,12 +2009,18 @@
     "laser-maze": { mode: "grid" },
     "ghost-escape": { mode: "grid" },
     "dungeon-doors": { mode: "grid" },
+    "maze-keys": { mode: "grid" },
     "drift-racer": { mode: "lane", color: "#ff715b" },
     "orbit-jumper": { mode: "lane", color: "#75e0ff" },
+    "meteor-lanes": { mode: "lane", color: "#75e0ff" },
     "bubble-pop": { mode: "target", prompt: "Pop the bubble", color: "#75e0ff" },
+    "color-pop": { mode: "target", prompt: "Pop the color", color: "#ff6b9a" },
+    "speed-clicker": { mode: "target", prompt: "Hit the marker", color: "#f7c75b" },
     "rhythm-tap": { mode: "timing", prompt: "Tap inside the center beat.", hit: "Clean beat.", miss: "Missed beat." },
     "tower-stack": { mode: "timing", prompt: "Drop on the center line.", hit: "Stacked clean.", miss: "Tower wobbled." },
     "pixel-fishing": { mode: "timing", prompt: "Reel when the marker centers.", hit: "Fish caught.", miss: "It slipped away." },
+    "timing-lock": { mode: "timing", prompt: "Stop on the open notch.", hit: "Unlocked.", miss: "Jammed." },
+    "lucky-coins": { mode: "chance", prompt: "Flip, bank, and leave before the streak breaks." },
     "asteroid-miner": { mode: "target", prompt: "Crack the asteroid", color: "#8b96a8" },
     "sky-tiles": { mode: "target", prompt: "Hit the lit tile", color: "#ff6b9a" },
     "mini-golf": { mode: "timing", prompt: "Putt at center power.", hit: "Sunk it.", miss: "Rimmed out." },
@@ -2139,8 +2042,10 @@
     Games[id] = embeddedWebGame;
   });
 
-  ["youtube", "spotify", "twitch", "discord", "wikipedia"].forEach(function (id) {
-    Games[id] = websiteLauncher;
+  (window.PIXEL_PARTY_GAMES || []).forEach(function (game) {
+    if (!Games[game.id] && game.externalUrl) {
+      Games[game.id] = websiteLauncher;
+    }
   });
 
   window.PixelPartyGames = Games;
